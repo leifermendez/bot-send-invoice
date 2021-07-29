@@ -2,6 +2,7 @@
  * ⚡⚡⚡ DECLARAMOS LAS LIBRERIAS y CONSTANTES A USAR! ⚡⚡⚡
  */
 require('dotenv').config()
+const _async = require('async')
 const fs = require('fs');
 const express = require('express');
 const ora = require('ora');
@@ -15,6 +16,7 @@ app.use(express.urlencoded({ extended: true }))
 const SESSION_FILE_PATH = './session.json';
 let client;
 let sessionData;
+let queueSend = []
 const PORT = process.env.PORT || 9000
 
 /**
@@ -43,6 +45,18 @@ const sendMessage = (number = null, text = null) => new Promise((resolve, reject
     resolve(msg)
 })
 
+/**
+ * Delay
+ * @param {*} number 
+ * @returns 
+ */
+
+const delay = (t) => {
+    return new Promise(resolve => {
+        setTimeout(resolve.bind(null), t);
+    });
+
+}
 /**
  * Clear number
  */
@@ -131,19 +145,31 @@ const withOutSession = () => {
 }
 
 const connectionReady = async () => {
+    let secondDelay = 2000
 
     /** Leer CSV **/
     const customers = await handleExcel() || [];
 
-    console.log(customers);
     /** Enviamos a cada numero */
 
-    customers.forEach(async ({ to, name, file }) => {
+    let q = _async.queue(async ({ to, name, file }, callback) => {
 
-        await sendMessage(to, `Hola ${name}`)
-        await sendMedia(to, file)
+        const resWs = await sendMessage(to, `Hola ${name}`)
+        const getInfo = await resWs.getChat();
+        secondDelay = getInfo.isReadOnly !== undefined ? 5000 : 2000;
+        // await getInfo.fetchMessages({ 'limit': 300 })
+        console.log(`Esperamos...`, secondDelay)
+        await delay(secondDelay)
+        callback();
+    }, 1);
 
+    customers.forEach((customer) => {
+        q.push(customer, (err) => {
+            console.log('finished processing foo');
+        });
     })
+
+
 
 }
 
